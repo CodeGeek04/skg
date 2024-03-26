@@ -3,185 +3,102 @@
 
 import { useState, useEffect } from "react";
 import Fuse from "fuse.js";
-import { Project } from "@prisma/client";
+import { Client, Project } from "@prisma/client";
+import { AddProjectServer, fetchClientByName } from "~/app/serverActions";
 
 interface AddProjectProps {
-  onAddProject: (newProject: Partial<Project>) => void;
   onClose: () => void;
+  mobiles: string[];
 }
 
-// ... (imports and other code)
+const AddProject: React.FC<AddProjectProps> = ({ mobiles, onClose }) => {
+  const [newProject, setNewProject] = useState<Partial<Project>>({});
+  const [client, setClient] = useState<Partial<Client>>({});
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
-const AddProject: React.FC<AddProjectProps> = ({ onAddProject, onClose }) => {
-  const [newProject, setNewProject] = useState<Partial<Project>>({
-    projectName: "",
-    mobile: "",
-    clientName: "", // Add clientName to state
+  const fuse = new Fuse(mobiles, {
+    keys: ["clientName"],
+    threshold: 0.3,
   });
 
-  const [clientNumbers, setClientNumbers] = useState<string[]>([]);
-  const [address, setAddress] = useState<string>("");
-  const [fuse, setFuse] = useState<Fuse<string> | null>(null);
-
-  useEffect(() => {
-    // Fetch client numbers from the server when the component mounts
-    const fetchClientNumbers = async () => {
-      try {
-        const response = await fetch("/api/client/getNumbers", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        });
-        if (!response.ok) {
-          throw new Error("Failed to fetch client numbers");
-        }
-        const data: string[] = await response.json();
-        setClientNumbers(data);
-        setFuse(new Fuse(data));
-      } catch (error: any) {
-        console.error("Error fetching client numbers:", error.message);
-      }
-    };
-
-    fetchClientNumbers();
-  }, []);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNewProject((prevProject) => ({ ...prevProject, [name]: value }));
-  };
-
-  const handleClientSelect = async (selectedClient: string) => {
-    setNewProject((prevProject) => ({
-      ...prevProject,
-      mobile: selectedClient,
-    }));
-
+  const fetchClient = async () => {
     try {
-      const response = await fetch(`/api/client/getClient`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ mobile: selectedClient }),
-      });
-
-      if (!response.ok) {
-        alert("Client not found!!");
-        throw new Error("Failed to fetch client details");
+      const client = await fetchClientByName(newProject.clientName || "");
+      if (!client) {
+        alert("Client not found");
+        return;
       }
-
-      const data: { clientName: string; address: string } =
-        await response.json();
-
-      setAddress(data.address);
-
-      setNewProject((prevProject) => ({
-        ...prevProject,
-        clientName: data.clientName,
-      }));
+      setClient(client);
     } catch (error: any) {
-      alert("Client not found!!");
-      console.error("Error fetching client details:", error.message);
+      console.error("Error fetching client:", error.message);
     }
   };
 
-  const handleAddProject = () => {
-    // Validate that all required fields are filled
-    if (
-      !newProject.projectName ||
-      !newProject.mobile ||
-      !newProject.clientName
-    ) {
-      // Use a more user-friendly notification library or component
-      alert("Please enter all required information.");
-      return;
+  const handleAddProject = async () => {
+    try {
+      await AddProjectServer(newProject);
+      onClose();
+    } catch (error: any) {
+      console.error("Error adding project:", error.message);
     }
-
-    onAddProject(newProject);
-    onClose();
   };
 
   return (
-    <div className="fixed left-0 top-0 flex h-full w-full items-center justify-center bg-gray-800 bg-opacity-75">
-      <div className="w-96 rounded-md bg-white p-8">
-        <h2 className="mb-4 text-2xl font-bold">Add Project</h2>
+    <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-70">
+      <div className="rounded-md bg-white p-6 shadow-md">
+        <label htmlFor="clientName" className="mb-1 block font-semibold">
+          Client Name
+        </label>
+        <input
+          id="clientName"
+          type="text"
+          value={newProject.clientName || ""}
+          onChange={(e) => {
+            setNewProject({ ...newProject, clientName: e.target.value });
+            const result = fuse.search(e.target.value);
+            setSuggestions(result.map((item) => item.item));
+          }}
+          list="clientNameSuggestions" // Referencing the datalist
+          className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <datalist id="clientNameSuggestions">
+          {suggestions.map((suggestion, index) => (
+            <option key={index} value={suggestion} />
+          ))}
+        </datalist>
+        <button
+          onClick={fetchClient}
+          className="rounded bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          Fetch Client
+        </button>
+
+        <h2 className="mb-2 mt-4 text-2xl font-bold">Client Details</h2>
+        <div className="mb-2">
+          Name: {client.clientName ? client.clientName : ""}
+        </div>
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Client Number
-          </label>
-          <input
-            type="text"
-            name="mobile"
-            value={newProject.mobile}
-            onChange={handleInputChange}
-            className="mt-1 w-full rounded-md border p-2"
-            list="clientNumbers"
-          />
-          <datalist id="clientNumbers">
-            {fuse &&
-              fuse
-                .search(newProject.mobile ?? "")
-                .map(({ item }) => (
-                  <option
-                    key={item}
-                    value={item}
-                    onClick={() => handleClientSelect(item)}
-                  />
-                ))}
-          </datalist>
-          <button
-            onClick={() => handleClientSelect(newProject.mobile || "")}
-            className="mt-2 rounded-md bg-blue-500 px-4 py-2 text-white"
-          >
-            Fetch Client
-          </button>
+          Address: {client.address ? client.address : ""}
         </div>
-        {/* Display client information */}
-        {newProject.clientName && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-600">
-              Client Name
-            </label>
-            <div>{newProject.clientName}</div>
-          </div>
-        )}
-        {address && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-600">
-              Client Address
-            </label>
-            <div>{address}</div>
-          </div>
-        )}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Project Name
-          </label>
-          <input
-            type="text"
-            name="projectName"
-            value={newProject.projectName}
-            onChange={handleInputChange}
-            className="mt-1 w-full rounded-md border p-2"
-          />
-        </div>
-        <div className="flex justify-end">
-          <button
-            onClick={handleAddProject}
-            className="mr-2 rounded-md bg-blue-500 px-4 py-2 text-white"
-          >
-            Add
-          </button>
-          <button
-            onClick={onClose}
-            className="rounded-md px-4 py-2 text-gray-500"
-          >
-            Cancel
-          </button>
-        </div>
+
+        <label htmlFor="projectName" className="mb-1 block font-semibold">
+          Project Name
+        </label>
+        <input
+          id="projectName"
+          type="text"
+          value={newProject.projectName || ""}
+          onChange={(e) =>
+            setNewProject({ ...newProject, projectName: e.target.value })
+          }
+          className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          onClick={handleAddProject}
+          className="rounded bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          Add Project
+        </button>
       </div>
     </div>
   );

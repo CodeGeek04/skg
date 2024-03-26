@@ -1,165 +1,128 @@
-// AddClient.tsx
+"use client";
 
 import { Client } from "@prisma/client";
 import { useState } from "react";
+import { AddClientServer } from "~/app/serverActions";
 
 interface AddClientProps {
   onClose: () => void;
-  onAddClient: (newClient: Partial<Client>) => void;
 }
 
-const AddClient: React.FC<AddClientProps> = ({ onClose, onAddClient }) => {
-  const [newClient, setNewClient] = useState<Partial<Client>>({
-    mobile: "",
-    clientName: "",
-    address: "",
-    mailId: "",
-    alternateNumbers: [],
-  });
+const AddClient: React.FC<AddClientProps> = ({ onClose }) => {
+  const [newClient, setNewClient] = useState<Partial<Client>>({});
+  const [newAlternateNumber, setNewAlternateNumber] = useState<string>("");
+  const [newMailId, setNewMailId] = useState<string>("");
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNewClient((prevClient) => ({
-      ...prevClient,
-      [name]: value,
-    }));
-  };
-
-  const handleAddAlternateNumber = () => {
-    setNewClient((prevClient) => ({
-      ...prevClient,
-      alternateNumbers: [...(prevClient.alternateNumbers ?? []), ""],
-    }));
-  };
-
-  const handleRemoveAlternateNumber = (index: number) => {
-    setNewClient((prevClient) => {
-      const updatedAlternateNumbers = [...(prevClient.alternateNumbers ?? [])];
-      updatedAlternateNumbers.splice(index, 1);
-      return {
-        ...prevClient,
-        alternateNumbers: updatedAlternateNumbers,
-      };
-    });
-  };
-
-  const handleAlternateNumberChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    index: number,
-  ) => {
-    const { value } = e.target;
-    setNewClient((prevClient) => {
-      const updatedAlternateNumbers = [...(prevClient.alternateNumbers ?? [])];
-      updatedAlternateNumbers[index] = value;
-      return {
-        ...prevClient,
-        alternateNumbers: updatedAlternateNumbers,
-      };
-    });
-  };
-
-  const handleAddClient = () => {
-    // Validate that all required fields are filled
-    if (!newClient.mobile || !newClient.clientName) {
-      alert("Please enter mobile and client name."); // Replace with a more user-friendly notification
-      return;
+  const handleAddClient = async () => {
+    try {
+      await AddClientServer(newClient);
+      onClose();
+    } catch (error: any) {
+      console.error("Error adding client:", error.message);
     }
-
-    onAddClient(newClient);
-    onClose();
   };
 
   return (
-    <div className="fixed left-0 top-0 flex h-full w-full items-center justify-center bg-gray-800 bg-opacity-75">
-      <div className="w-96 rounded-md bg-white p-8">
+    <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-70">
+      <div className="rounded-md bg-white p-6 shadow-md">
         <h2 className="mb-4 text-2xl font-bold">Add Client</h2>
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Mobile
-          </label>
-          <input
-            type="text"
-            name="mobile"
-            value={newClient.mobile}
-            onChange={handleInputChange}
-            className="mt-1 w-full rounded-md border p-2"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
+          <label htmlFor="clientName" className="mb-1 block font-semibold">
             Client Name
           </label>
           <input
+            id="clientName"
             type="text"
-            name="clientName"
-            value={newClient.clientName}
-            onChange={handleInputChange}
-            className="mt-1 w-full rounded-md border p-2"
+            value={newClient.clientName || ""}
+            onChange={(e) =>
+              setNewClient({ ...newClient, clientName: e.target.value })
+            }
+            className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
+          <label htmlFor="address" className="mb-1 block font-semibold">
             Address
           </label>
           <input
+            id="address"
             type="text"
-            name="address"
-            value={newClient.address}
-            onChange={handleInputChange}
-            className="mt-1 w-full rounded-md border p-2"
+            value={newClient.address || ""}
+            onChange={(e) =>
+              setNewClient({ ...newClient, address: e.target.value })
+            }
+            className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Email
-          </label>
-          <input
-            type="text"
-            name="mailId"
-            value={newClient.mailId}
-            onChange={handleInputChange}
-            className="mt-1 w-full rounded-md border p-2"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
+          <label
+            htmlFor="alternateNumbers"
+            className="mb-1 block font-semibold"
+          >
             Alternate Numbers
           </label>
-          {newClient.alternateNumbers?.map((number, index) => (
-            <div key={index} className="mt-2 flex items-center">
-              <input
-                type="text"
-                value={number}
-                onChange={(e) => handleAlternateNumberChange(e, index)}
-                className="w-full rounded-md border p-2"
-              />
-              <button
-                onClick={() => handleRemoveAlternateNumber(index)}
-                className="ml-2 rounded-md bg-red-500 px-4 py-2 text-white"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
+          {newClient.alternateNumbers &&
+            newClient.alternateNumbers.map((number, index) => (
+              <div key={index}>{number}</div>
+            ))}
+          <input
+            id="alternateNumbers"
+            type="text"
+            value={newAlternateNumber}
+            onChange={(e) => setNewAlternateNumber(e.target.value)}
+            className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
           <button
-            onClick={handleAddAlternateNumber}
-            className="mt-2 rounded-md bg-blue-500 px-4 py-2 text-white"
+            onClick={() => {
+              setNewClient({
+                ...newClient,
+                alternateNumbers: [
+                  ...(newClient.alternateNumbers || []),
+                  newAlternateNumber,
+                ],
+              });
+              setNewAlternateNumber("");
+            }}
+            className="rounded bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             Add Alternate Number
           </button>
         </div>
-        {/* Include other fields for adding */}
-        {/* ... */}
-        <div className="flex justify-end">
+        <div className="mb-4">
+          {newClient.mailId &&
+            newClient.mailId.map((mail, index) => (
+              <div key={index}>{mail}</div>
+            ))}
+          <input
+            id="mailId"
+            type="text"
+            value={newMailId}
+            onChange={(e) => setNewMailId(e.target.value)}
+            className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={() => {
+              setNewClient({
+                ...newClient,
+                mailId: [...(newClient.mailId || []), newMailId],
+              });
+              setNewMailId("");
+            }}
+            className="rounded bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            Add Mail Id
+          </button>
+        </div>
+        <div className="flex justify-end space-x-4">
           <button
             onClick={handleAddClient}
-            className="mr-2 rounded-md bg-blue-500 px-4 py-2 text-white"
+            className="rounded bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             Add
           </button>
           <button
             onClick={onClose}
-            className="rounded-md px-4 py-2 text-gray-500"
+            className="rounded bg-gray-300 px-4 py-2 font-semibold text-gray-800 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
           >
             Cancel
           </button>

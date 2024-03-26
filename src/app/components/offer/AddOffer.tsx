@@ -3,401 +3,220 @@
 
 import { useState, useEffect } from "react";
 import Fuse from "fuse.js";
+import { Client, Offer, Product, ProductSize, Project } from "@prisma/client";
+import { AddOfferProduct } from "./AddOfferProduct";
 import {
-  Project,
-  Product,
-  Client,
-  Offer,
-  Prisma,
-  OfferProduct,
-} from "@prisma/client";
-import AddOfferProduct from "./AddOfferProduct";
-import { off } from "process";
-import { set } from "zod";
+  fetchClientByName,
+  fetchProjects,
+  addOffer,
+} from "~/app/serverActions";
+import { offerProduct } from "~/app/types";
 
 interface AddOfferProps {
   onClose: () => void;
-  manufacturers: string[];
+  clientNames: string[];
 }
 
-const AddOffer: React.FC<AddOfferProps> = ({ onClose, manufacturers }) => {
-  const [newOffer, setNewOffer] = useState<Partial<Offer>>({
-    mobile: "",
-    clientName: "",
-    projectId: "",
-    projectName: "",
-    discount: 0,
+const AddOffer: React.FC<AddOfferProps> = ({ onClose, clientNames }) => {
+  const [offer, setOffer] = useState<Partial<Offer>>({
     totalPrice: 0,
   });
-
-  const [totalPrice, setTotalPrice] = useState<number>(0);
-
-  const [offerProducts, setOfferProducts] = useState<Partial<OfferProduct>[]>(
-    [],
-  );
-
+  const [client, setClient] = useState<Client | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [selectedOfferProduct, setSelectedOfferProduct] =
-    useState<Partial<OfferProduct> | null>(null);
-  const [isDeleteOfferProductModalOpen, setIsDeleteOfferProductModalOpen] =
-    useState(false);
-  const [fuseClients, setFuseClients] = useState<Fuse<Client> | null>(null);
-  const [fuseMobiles, setFuseMobiles] = useState<Fuse<string> | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [offerProducts, setOfferProducts] = useState<offerProduct[]>([]);
   const [isAddOfferProductModalOpen, setIsAddOfferProductModalOpen] =
     useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  console.log("clientNames", clientNames);
+
+  const fuse = new Fuse(clientNames, {
+    keys: ["clientName"],
+    threshold: 0.3,
+  });
+
+  const handleCloseAddOfferProductModal = () => {
+    setIsAddOfferProductModalOpen(false);
+  };
+
+  const calculateTotalPrice = () => {
+    let totalPrice = 0;
+    offerProducts.forEach((offerProduct) => {
+      let productPrice = 0;
+      offerProduct.productQuantities.forEach((productQuantity) => {
+        productPrice +=
+          productQuantity.productSize.listPrice * productQuantity.quantity;
+      });
+      totalPrice += productPrice * (1 - offerProduct.discount / 100);
+    });
+    setOffer({ ...offer, totalPrice });
+  };
 
   useEffect(() => {
-    // Fetch client numbers from the server when the component mounts
-    const fetchClientNumbers = async () => {
-      try {
-        const response = await fetch("/api/client/getClients", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        });
-        if (!response.ok) {
-          throw new Error("Failed to fetch client numbers");
-        }
-        const data: Client[] = await response.json();
-        setFuseClients(new Fuse(data));
-        setFuseMobiles(new Fuse(data.map((client) => client.mobile)));
-      } catch (error: any) {
-        console.error("Error fetching client numbers:", error.message);
-      }
-    };
+    calculateTotalPrice();
+  }, [offerProducts]);
 
-    fetchClientNumbers();
-  }, []);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNewOffer((prevOffer: Partial<Offer>) => ({
-      ...prevOffer,
-      [name]: value,
-    }));
-  };
-
-  const handleClientSelect = async (selectedClient: string) => {
-    setNewOffer((prevOffer: any) => ({
-      ...prevOffer,
-      mobile: selectedClient,
-    }));
-
-    try {
-      const response = await fetch(`/api/client/getClient`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ mobile: selectedClient }),
-      });
-
-      if (!response.ok) {
-        alert("Client not found!!");
-        throw new Error("Failed to fetch client");
-      }
-
-      const data = (await response.json()) as Client;
-      setNewOffer((prevOffer: any) => ({
-        ...prevOffer,
-        clientName: data.clientName,
-      }));
-      setSelectedClient(data);
-    } catch (error: any) {
-      alert("Error, Client not found!!");
-      console.error("Error fetching client:", error.message);
-    }
-
-    try {
-      const response = await fetch(`/api/project/getForClient`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ clientMobile: selectedClient }),
-      });
-
-      if (!response.ok) {
-        alert("Client not found!!");
-        throw new Error("Failed to fetch projects");
-      }
-
-      const data = (await response.json()) as Project[];
-      setProjects(data);
-    } catch (error: any) {
-      alert("Error, Client not found!!");
-      console.error("Error fetching projects:", error.message);
-    }
-  };
-
-  const handleProjectSelect = (selectedProjectId: string) => {
-    setNewOffer((prevOffer: any) => ({
-      ...prevOffer,
-      projectId: selectedProjectId,
-      projectName: projects.find(
-        (project) => project.projectId === selectedProjectId,
-      )?.projectName,
-    }));
-  };
-
-  const handleAddOffer = async () => {
-    // Validate that all required fields are filled
-    if (!newOffer.mobile || !newOffer.projectId) {
-      // Use a more user-friendly notification library or component
-      alert("Please enter all required information.");
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/offer/add", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newOffer),
-      });
-
-      if (!response.ok) {
-        alert("Failed to add offer to the database");
-        throw new Error("Failed to add offer to the database");
-      }
-
-      const data: { offerNumber: string } = await response.json();
-
-      offerProducts.forEach(async (product) => {
-        const response = await fetch("/api/offerProduct/addForOffer", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            offerNumber: data.offerNumber,
-            productName: product.productName,
-            productId: product.productId,
-            listPrice: product.listPrice,
-            quantity: product.quantity,
-          }),
-        });
-
-        console.log("Response: ", response);
-
-        if (!response.ok) {
-          alert("Failed to add product to the offer");
-          throw new Error("Failed to add product to the offer");
-        }
-      });
-
-      alert(`Offer successfully added with ID: ${data.offerNumber}`);
-      onClose();
-    } catch (error: any) {
-      console.error("Error adding offer:", error.message);
-    }
-  };
-
-  const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const discount = parseFloat(e.target.value) || 0;
-    setTotalPrice(
-      (prevTotalPrice) =>
-        prevTotalPrice - (totalPrice * (newOffer.discount ?? 0)) / 100,
+  const handleFetchProjects = async () => {
+    const selectedClient = await fetchClientByName(
+      offer.clientName ? offer.clientName : "",
     );
-    setNewOffer((prevOffer) => ({
-      ...prevOffer,
-      discount,
-      totalPrice: totalPrice * (1 - discount / 100),
-    }));
-  };
-
-  const handleAddProduct = (product: Partial<OfferProduct>, price: number) => {
-    setOfferProducts((prevProducts) => [...prevProducts, product]);
-    setTotalPrice((prevTotalPrice) => prevTotalPrice + price);
-    setNewOffer((prevOffer) => ({
-      ...prevOffer,
-      totalPrice: (prevOffer.totalPrice ?? 0) + price,
-    }));
-  };
-
-  const handleRemoveOfferProduct = (productId: number) => {
-    setOfferProducts((prevProducts) =>
-      prevProducts.filter((product) => product.productId !== productId),
-    );
-    setTotalPrice(
-      (prevTotalPrice) =>
-        prevTotalPrice -
-        (selectedOfferProduct?.listPrice ?? 0) *
-          (selectedOfferProduct?.quantity ?? 0),
-    );
-    setNewOffer((prevOffer) => ({
-      ...prevOffer,
-      totalPrice:
-        (prevOffer.totalPrice ?? 0) -
-        (selectedOfferProduct?.listPrice ?? 0) *
-          (selectedOfferProduct?.quantity ?? 0),
-    }));
-    setIsDeleteOfferProductModalOpen(false);
+    if (selectedClient) {
+      setClient(selectedClient);
+      const projects = await fetchProjects(selectedClient);
+      setProjects(projects);
+    }
   };
 
   return (
-    <div className="fixed left-0 top-0 flex h-full w-full items-center justify-center bg-gray-800 bg-opacity-75">
-      <div className="w-96 rounded-md bg-white p-8">
-        <h2 className="mb-4 text-2xl font-bold">Add Offer</h2>
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Client Number
-          </label>
-          <input
-            type="text"
-            name="mobile"
-            value={newOffer.mobile}
-            onChange={(e) => handleInputChange(e)}
-            className="mt-1 w-full rounded-md border p-2"
-            list="mobiles"
-          />
-          <datalist id="mobiles">
-            {fuseMobiles &&
-              fuseMobiles
-                .search(newOffer.mobile ?? "")
-                .map(({ item }) => (
-                  <option
-                    key={item}
-                    value={item}
-                    onClick={() => handleClientSelect(item)}
-                  />
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-900 bg-opacity-70">
+      <div className="w-full max-w-2xl rounded-lg bg-white p-6">
+        <div className="mb-4 grid grid-cols-2 gap-4">
+          <div>
+            <h2 className="mb-4 text-xl font-semibold">Add Offer</h2>
+            <div className="mb-4">
+              <label htmlFor="offerNumber" className="mb-2 block">
+                Offer Number
+              </label>
+              <input
+                type="text"
+                id="offerNumber"
+                onChange={(e) =>
+                  setOffer({ ...offer, offerNumber: e.target.value })
+                }
+                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="mb-4">
+              <label htmlFor="client" className="mb-2 block">
+                Client
+              </label>
+              <input
+                type="text"
+                list="clientNames"
+                id="client"
+                onChange={(e) => {
+                  setOffer({ ...offer, clientName: e.target.value });
+                  const results = fuse.search(e.target.value);
+                  setSuggestions(results.map((result) => result.item));
+                }}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="clientNames">
+                {suggestions.map((suggestion, index) => (
+                  <option key={index} value={suggestion} />
                 ))}
-          </datalist>
-          <button
-            onClick={() => handleClientSelect(newOffer.mobile || "")}
-            className="mt-2 rounded-md bg-blue-500 px-4 py-2 text-white"
-          >
-            Fetch Client
-          </button>
-        </div>
-        {/* Display client information */}
-        <div className="mb-4">
-          <h3 className="mb-2 text-lg font-semibold">Client Information</h3>
-          <p>Name: {selectedClient?.clientName}</p>
-          <p>Email: {selectedClient?.mailId}</p>
-        </div>
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Selected Project
-          </label>
-          <select
-            value={newOffer.projectId}
-            onChange={(e) => handleProjectSelect(e.target.value)}
-            className="mt-1 w-full rounded-md border p-2"
-          >
-            <option value="" disabled>
-              Select Project
-            </option>
-            {projects.map((project) => (
-              <option key={project.projectId} value={project.projectId}>
-                {project.projectName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Discount
-          </label>
-          <input
-            type="number"
-            name="discount"
-            value={newOffer.discount}
-            onChange={(e) => handleDiscountChange(e)}
-            className="mt-1 w-full rounded-md border p-2"
-          />
-        </div>
-        {/* AddOfferProduct component */}
-        {newOffer.projectId && isAddOfferProductModalOpen && (
-          <AddOfferProduct
-            onClose={() => setIsAddOfferProductModalOpen(false)}
-            onAddProduct={handleAddProduct}
-            manufacturers={manufacturers}
-          />
-        )}
-        <button
-          onClick={() => setIsAddOfferProductModalOpen(true)}
-          className="mb-4 rounded-md bg-blue-500 px-4 py-2 text-white"
-        >
-          Add New Product
-        </button>
-        {/* Display offer summary */}
-        <div className="mb-4">
-          <h3 className="mb-2 text-lg font-semibold">Offer Summary</h3>
-          <ul>
-            <ul>
-              {offerProducts?.map((offerProduct: Partial<OfferProduct>) => (
-                <li key={offerProduct.offerProductId}>
-                  {offerProduct.productName} - {offerProduct.listPrice} -{" "}
-                  {offerProduct.quantity}
-                  <button
-                    onClick={() => {
-                      setSelectedOfferProduct(offerProduct);
-                      setIsDeleteOfferProductModalOpen(true);
-                    }}
-                    className="ml-2 rounded-md bg-red-500 px-2 py-1 text-white"
-                  >
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </ul>
-          <p className="mt-2 font-semibold">
-            Total Price: ${newOffer.totalPrice?.toFixed(2)}
-          </p>
-        </div>
-        <div className="flex justify-end">
-          <button
-            onClick={handleAddOffer}
-            className="mr-2 rounded-md bg-blue-500 px-4 py-2 text-white"
-          >
-            Add Offer
-          </button>
-          <button
-            onClick={onClose}
-            className="rounded-md px-4 py-2 text-gray-500"
-          >
-            Cancel
-          </button>
-        </div>
-        {isDeleteOfferProductModalOpen && (
-          <div className="fixed left-0 top-0 z-50 flex h-full w-full items-center justify-center bg-gray-800 bg-opacity-75">
-            <div className="w-96 rounded-md bg-white p-8">
-              <h2 className="mb-4 text-2xl font-bold">
-                Confirm Product Removal
-              </h2>
-              <p className="mb-4">
-                Are you sure you want to remove this product?
-              </p>
-              <div className="flex justify-end">
-                <button
-                  className="mr-2 rounded-md bg-gray-500 px-4 py-2 text-white"
-                  onClick={() => setIsDeleteOfferProductModalOpen(false)}
-                >
-                  No
-                </button>
-                <button
-                  className="rounded-md bg-red-500 px-4 py-2 text-white"
-                  onClick={() =>
-                    handleRemoveOfferProduct(
-                      selectedOfferProduct?.productId || 0,
-                    )
-                  }
-                >
-                  Yes
-                </button>
-              </div>
+              </datalist>
+            </div>
+            <button onClick={handleFetchProjects}>Fetch Projects</button>
+            <div className="mb-4">
+              <label htmlFor="project" className="mb-2 block">
+                Project
+              </label>
+              <select
+                id="project"
+                value={selectedProject?.projectId || ""}
+                onChange={(e) => {
+                  const projectId = e.target.value;
+                  const selectedProject = projects.find(
+                    (project) => project.projectId === projectId,
+                  );
+                  setSelectedProject(selectedProject || null);
+                  setOffer({ ...offer, projectId });
+                }}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select a project</option>
+                {projects.map((project) => (
+                  <option key={project.projectId} value={project.projectId}>
+                    {project.projectName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mb-4">
+              <p className="text-lg font-semibold">Client Details:</p>
+              <p>{client?.clientName}</p>
+              <p>{client?.address}</p>
+            </div>
+            <div className="mb-4">
+              <p className="text-lg font-semibold">Project:</p>
+              <p>{selectedProject?.projectName}</p>
+            </div>
+            <div className="mb-4">
+              <p className="text-lg font-semibold">Total Price:</p>
+              <p>{offer.totalPrice}</p>
+            </div>
+            <div className="mb-4">
+              <button
+                onClick={() => setIsAddOfferProductModalOpen(true)}
+                className="rounded bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Add Product
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={onClose}
+                className="mr-2 rounded bg-gray-300 px-4 py-2 font-semibold text-gray-800 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await addOffer(offer, offerProducts);
+                  onClose();
+                }}
+                className="rounded bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Add Offer
+              </button>
             </div>
           </div>
-        )}
+          {isAddOfferProductModalOpen && (
+            <AddOfferProduct
+              onClose={handleCloseAddOfferProductModal}
+              offerProducts={offerProducts}
+              setOfferProducts={setOfferProducts}
+            />
+          )}
+          <div>
+            {offerProducts.map((offerProduct, index) => (
+              <div
+                key={index}
+                className="mt-4 rounded-md border border-gray-300 p-4"
+              >
+                <h3 className="text-lg font-semibold">
+                  {offerProduct.product?.productName}
+                </h3>
+                <p>Discount: {offerProduct.discount}</p>
+                <p className="font-semibold">Product Sizes:</p>
+                <ul>
+                  {offerProduct.productQuantities.map(
+                    (productQuantity, index) => (
+                      <li key={index}>
+                        {productQuantity.productSize.size} -{" "}
+                        {productQuantity.quantity}
+                      </li>
+                    ),
+                  )}
+                </ul>
+                <button
+                  onClick={() => {
+                    setOfferProducts(
+                      offerProducts.filter((product, idx) => idx !== index),
+                    );
+                  }}
+                  className="mt-2 rounded bg-red-500 px-4 py-2 font-semibold text-white hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  Remove Product
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
-
 export default AddOffer;

@@ -1,3 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Custom styles */
+
+/* Set the background gradient */
+body {
+  background: linear-gradient(
+    to right,
+    #2c3e50,
+    #3498db
+  ); /* Dark blue to light blue gradient */
+  color: #000000; /* White text color */
+}
+
+/* Set text color */
+.text-primary {
+  color: #fff; /* White */
+}
+
+.text-secondary {
+  color: #e5c28b; /* Golden */
+}
+
+/* Set link color */
+a {
+  color: #fff; /* White */
+}
+
+a:hover {
+  color: #e5c28b; /* Golden */
+}
+
+/* Set border color */
+.border-primary {
+  border-color: #fff; /* White */
+}
+
+/* Set button color */
+.btn-primary {
+  background-color: #8c1818; /* Dark red */
+  color: #fff; /* White */
+}
+
+.btn-primary:hover {
+  background-color: #e5c28b; /* Golden */
+}

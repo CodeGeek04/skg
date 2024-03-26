@@ -13,7 +13,7 @@ datasource db {
 model Product {
     productId    Int      @id @default(autoincrement())
     manufacturer String
-    productName  String
+    productName  String   @unique
     sizeUnit     String
     createdDate  DateTime @default(now())
     updatedDate  DateTime @updatedAt
@@ -24,76 +24,60 @@ model Product {
 model ProductSize {
     productSizeId Int      @id @default(autoincrement())
     productId     Int
-    size          String
+    size          Float
     listPrice     Float
     createdDate   DateTime @default(now())
 
-    product       Product        @relation(fields: [productId], references: [productId])
+    product       Product        @relation(fields: [productId], references: [productId], onDelete: Cascade)
     offerProducts OfferProduct[]
 }
 
 model Client {
-    mobile           String   @id
-    clientName       String
+    clientName       String   @id
     address          String
     mailId           String[]
     alternateNumbers String[]
     createdDate      DateTime @default(now())
     updatedDate      DateTime @updatedAt
 
-    offers    Offer[]
-    projects  Project[]
-    enquiries Enquiry[]
+    offers   Offer[]
+    projects Project[]
 }
 
 model Project {
     projectId   String   @id @default(uuid())
     projectName String
-    mobile      String
+    clientName  String
     createdDate DateTime @default(now())
     updatedDate DateTime @updatedAt
 
-    client    Client    @relation(fields: [mobile], references: [mobile])
-    offers    Offer[]
-    enquiries Enquiry[]
+    client Client  @relation(fields: [clientName], references: [clientName], onDelete: Cascade)
+    offers Offer[]
 }
 
 model Offer {
-    offerNumber Int      @id @default(autoincrement())
-    client      Client   @relation(fields: [mobile], references: [mobile])
-    mobile      String
-    project     Project  @relation(fields: [projectId], references: [projectId])
+    offerId     String   @id @default(uuid())
+    offerNumber String
+    client      Client   @relation(fields: [clientName], references: [clientName], onDelete: Cascade)
+    clientName  String
+    project     Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
     projectId   String
     totalPrice  Float
+    isEnquired  Boolean  @default(false)
+    isCurrent   Boolean  @default(true)
     createdDate DateTime @default(now())
-    updatedDate DateTime @updatedAt
 
     offerProducts OfferProduct[]
 }
 
 model OfferProduct {
     offerProductId String   @id @default(uuid())
-    offerNumber    Int
+    offer          Offer    @relation(fields: [offerId], references: [offerId], onDelete: Cascade)
+    offerId        String
     productSizeId  Int
     quantity       Int      @default(0)
     discount       Float    @default(0)
     createdDate    DateTime @default(now())
 
-    productSize ProductSize @relation(fields: [productSizeId], references: [productSizeId])
-    offer       Offer[]
-    enquiry     Enquiry[]
-}
-
-model Enquiry {
-    enquiryId   String   @id @default(uuid())
-    offerNumber Int
-    client      Client   @relation(fields: [mobile], references: [mobile])
-    mobile      String
-    project     Project  @relation(fields: [projectId], references: [projectId])
-    projectId   String
-    discount    Float    @default(0)
-    totalPrice  Float
-    createdDate DateTime @default(now())
-
-    offerProducts OfferProduct[]
+    productSize ProductSize @relation(fields: [productSizeId], references: [productSizeId], onDelete: Cascade)
 }

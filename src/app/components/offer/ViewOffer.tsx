@@ -1,221 +1,91 @@
-import { Client, Offer, OfferProduct, Product } from "@prisma/client";
-import React, { useState, useEffect } from "react";
+import { Offer } from "@prisma/client";
+import { useEffect, useState } from "react";
+import { addToEnquiry, fetchOfferProducts } from "~/app/serverActions";
+import { offerProduct } from "~/app/types";
 
-interface OfferDetailsProps {
+interface ViewOfferProps {
+  onClose: () => void;
   offer: Offer;
-  setIsOverlayOpen: (value: boolean) => void;
+  showAddToEnquiry?: boolean;
 }
 
-const OfferDetails = ({ offer, setIsOverlayOpen }: OfferDetailsProps) => {
-  const [offerProducts, setOfferProducts] = useState<OfferProduct[]>([]);
-  const [selectedOfferProduct, setSelectedOfferProduct] =
-    useState<OfferProduct | null>(null);
+export const ViewOffer: React.FC<ViewOfferProps> = ({
+  onClose,
+  offer,
+  showAddToEnquiry = true,
+}) => {
+  const [offerProducts, setOfferProducts] = useState<offerProduct[]>();
+  const [addedToEnquiry, setAddedToEnquiry] = useState<boolean>(
+    offer.isEnquired,
+  );
+
+  const FetchOfferProducts = async () => {
+    const result = await fetchOfferProducts(offer.offerId);
+    console.log("result", result);
+    setOfferProducts(result);
+  };
 
   useEffect(() => {
-    // Fetch offer products for the specific offer
-    const fetchOfferProducts = async () => {
-      try {
-        const response = await fetch("/api/offerProduct/getForOffer", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            offerNumber: offer.offerNumber,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch offer products");
-        }
-
-        const data = await response.json();
-        setOfferProducts(data);
-      } catch (error) {
-        console.error("Error fetching offer products", error);
-      }
-    };
-
-    fetchOfferProducts();
-  }, [offer.offerNumber]);
-
-  const handleDeleteOfferProduct = async (offerProductId: string) => {
-    // Ask for confirmation before deleting
-    const isConfirmed = window.confirm(
-      "Are you sure you want to delete this offer product?",
-    );
-
-    if (!isConfirmed) {
-      return;
-    }
-
-    try {
-      // Call the API to delete the offer product
-      const response = await fetch("/api/offerProduct/deleteOfferProduct", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          offerProductId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete offer product");
-      }
-
-      // Update the local state after successful deletion
-      setOfferProducts((prevOfferProducts) =>
-        prevOfferProducts.filter(
-          (product) => product.offerProductId !== offerProductId,
-        ),
-      );
-    } catch (error) {
-      console.error("Error deleting offer product", error);
-    }
-  };
-
-  const exportToCSV = async () => {
-    const clientResponse = await fetch("/api/client/getClient", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        mobile: offer.mobile,
-      }),
-    });
-
-    if (!clientResponse.ok) {
-      throw new Error("Failed to fetch client");
-    }
-
-    const client: Client = await clientResponse.json();
-
-    const products: Product[] = [];
-    for (const offerProduct of offerProducts) {
-      const productResponse = await fetch("/api/product/getProduct", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          productId: offerProduct.productId,
-        }),
-      });
-
-      if (!productResponse.ok) {
-        throw new Error("Failed to fetch product");
-      }
-
-      const product: Product = await productResponse.json();
-      products.push(product);
-    }
-
-    const csvContent = [
-      // Client details
-      `Client Name: ${offer.clientName}`,
-      `Address: ${client.address}`,
-      `Mail Id: ${client.mailId}`,
-      `Alternate Numbers: ${client.alternateNumbers.join(", ")}`,
-      "",
-      // General offer details
-      `Offer Number: ${offer.offerNumber}`,
-      `Project: ${offer.projectName}`,
-      `Discount: ${offer.discount}`,
-      `Total Price: ${offer.totalPrice}`,
-      "",
-      // Offer products
-      "Products:",
-      "Product Manufacturer, Name, Size, List Price, Quantity",
-      ...products.map((product, index) => {
-        const offerProduct = offerProducts[index];
-        return `${product.manufacturer}, ${product.productName}, ${product.size}${product.sizeUnit}, ${product.listPrice}, ${offerProduct?.quantity}`;
-      }),
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute(
-      "download",
-      `${offer.clientName}-${offer.projectName}.csv`,
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    FetchOfferProducts();
+  }, []);
 
   return (
-    <div className="fixed inset-0 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="w-full max-w-md rounded bg-white p-8 shadow-md">
-          <h2 className="mb-4 text-2xl font-bold">Offer Details</h2>
-          <p>Offer Number: {offer.offerNumber}</p>
-          <p>Client: {offer.clientName}</p>
-          <p>Project: {offer.projectName}</p>
-          <p>Discount: {offer.discount}</p>
-          <p>Total Price: {offer.totalPrice}</p>
+    <div className="px-4 py-6">
+      <h2 className="mb-4 text-xl font-semibold">View Offer</h2>
+      <h3 className="text-lg font-semibold">
+        Offer Number: {offer.offerNumber}
+      </h3>
+      <h3 className="text-lg font-semibold">
+        Create Date: {offer.createdDate.toDateString()}
+      </h3>
+      <h3 className="text-lg font-semibold">Client Name: {offer.clientName}</h3>
+      <h3 className="text-lg font-semibold">Total Price: {offer.totalPrice}</h3>
+      <h3 className="text-lg font-semibold">Offer Products</h3>
+      <ul className="mt-2">
+        {offerProducts?.map((offerProduct, index) => (
+          <div key={index} className="mb-4">
+            <h3 className="text-lg font-semibold">
+              {offerProduct.product?.productName}
+            </h3>
+            <p className="text-base">Discount: {offerProduct.discount}</p>
+            <p className="text-base">Product Sizes:</p>
+            <ul className="ml-4 mt-2">
+              {offerProduct.productQuantities.map((productQuantity, index) => (
+                <div key={index} className="mb-2">
+                  <li className="text-base">
+                    {productQuantity.productSize?.size} -{" "}
+                    {productQuantity.quantity}
+                  </li>
+                </div>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </ul>
+      {showAddToEnquiry && (
+        <div className="mt-4">
+          {addedToEnquiry ? (
+            <p className="text-base">Offer added to Enquiry Sheet</p>
+          ) : (
+            <button
+              onClick={async () => {
+                await addToEnquiry(offer.offerId);
 
-          <h3 className="mt-4 text-lg font-semibold">Offer Products</h3>
-          <ul>
-            {offerProducts.map((product) => (
-              <li key={product.offerProductId} className="mb-2">
-                {product.productName} - List Price: {product.listPrice} -
-                Quantity: {product.quantity}
-                <button
-                  className="ml-2 rounded bg-red-500 px-2 py-1 text-white"
-                  onClick={() => setSelectedOfferProduct(product)}
-                >
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {/* Export to CSV button */}
-          <button
-            className="mt-4 rounded bg-blue-500 px-4 py-2 text-white"
-            onClick={exportToCSV}
-          >
-            Export to CSV
-          </button>
-
-          {/* Confirmation modal for deleting offer product */}
-          {selectedOfferProduct && (
-            <div className="mt-4">
-              <p>
-                Are you sure you want to delete{" "}
-                {selectedOfferProduct.productName}?
-              </p>
-              <button
-                className="mr-2 rounded bg-green-500 px-2 py-1 text-white"
-                onClick={() =>
-                  handleDeleteOfferProduct(selectedOfferProduct.offerProductId)
-                }
-              >
-                Yes
-              </button>
-              <button
-                className="rounded bg-gray-500 px-2 py-1 text-white"
-                onClick={() => setSelectedOfferProduct(null)}
-              >
-                No
-              </button>
-            </div>
+                setAddedToEnquiry(true);
+              }}
+              className="rounded bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            >
+              Add to Enquiry Sheet
+            </button>
           )}
-
-          <button
-            className="mt-4 rounded bg-gray-300 px-4 py-2 hover:bg-gray-400"
-            onClick={() => setIsOverlayOpen(false)}
-          >
-            Close
-          </button>
         </div>
-      </div>
+      )}
+      <button
+        onClick={onClose}
+        className="mt-4 rounded bg-gray-300 px-4 py-2 font-bold text-gray-800 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50"
+      >
+        Close
+      </button>
     </div>
   );
 };
-
-export default OfferDetails;
